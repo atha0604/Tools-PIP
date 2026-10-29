@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         PIP Usulan - Unduh Data Siswa per Sekolah
 // @namespace    pip-unduh-data-siswa
-// @version      1.3
+// @version      1.4
 // Riwayat:
+//   1.4 - nomor versi di panel ikut versi script (dulu tertulis 1.0)
 //   1.3 - alamat pembaruan otomatis (GitHub atha0604/Tools-PIP)
 //   1.2 - akses diaktifkan sebelum daftar sekolah dibaca (jenjang akun terbaca benar, juga untuk versi bookmarklet)
 //   1.1 - rekap otomatis: sheet Rekap per Kecamatan (jumlah sekolah, siswa, valid, tidak valid, desil 1-4, SK, usulan sekolah/dinas, kelas berjalan/awal + TOTAL) dan Rekap per Sekolah di Excel gabungan; ZIP berisi Rekap per Kecamatan.xlsx
@@ -19,7 +20,7 @@
 
 (function () {
   'use strict';
-  const W = window, VERSI = '1.0';
+  const W = window, VERSI = '1.4';
   const CAP = { pdUrl: null, headers: {}, sekolah: [], jenjang: null, tebak: false };
   const KEC = {};            // kode sekolah -> kecamatan
   let HASIL = {};            // kode sekolah -> { s, rows }

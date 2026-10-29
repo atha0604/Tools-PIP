@@ -1,4 +1,4 @@
-// Unduh Data Siswa PIP v1.3 (versi bookmarklet: tanpa Tampermonkey). Dibuat dari pip-unduh-data-siswa.user.js
+// Unduh Data Siswa PIP v1.4 (versi bookmarklet: tanpa Tampermonkey). Dibuat dari pip-unduh-data-siswa.user.js
 (function () {
   if (window.__pipUnduh) { var p = document.getElementById('pipUnPanel'); if (p) p.classList.remove('mini'); return; }
   window.__pipUnduh = 1;
@@ -10,7 +10,7 @@
   ]).then(function () {
 (function () {
   'use strict';
-  const W = window, VERSI = '1.0';
+  const W = window, VERSI = '1.4';
   const CAP = { pdUrl: null, headers: {}, sekolah: [], jenjang: null, tebak: false };
   const KEC = {};            // kode sekolah -> kecamatan
   let HASIL = {};            // kode sekolah -> { s, rows }
