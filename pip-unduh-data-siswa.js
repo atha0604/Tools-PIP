@@ -1,4 +1,4 @@
-// Unduh Data Siswa PIP v1.4 (versi bookmarklet: tanpa Tampermonkey). Dibuat dari pip-unduh-data-siswa.user.js
+// Unduh Data Siswa PIP v1.5 (versi bookmarklet: tanpa Tampermonkey). Dibuat dari pip-unduh-data-siswa.user.js
 (function () {
   if (window.__pipUnduh) { var p = document.getElementById('pipUnPanel'); if (p) p.classList.remove('mini'); return; }
   window.__pipUnduh = 1;
@@ -10,7 +10,7 @@
   ]).then(function () {
 (function () {
   'use strict';
-  const W = window, VERSI = '1.4';
+  const W = window, VERSI = '1.5';
   const CAP = { pdUrl: null, headers: {}, sekolah: [], jenjang: null, tebak: false };
   const KEC = {};            // kode sekolah -> kecamatan
   let HASIL = {};            // kode sekolah -> { s, rows }
@@ -247,9 +247,15 @@
   }
 
   // ---------- rekap: jumlah siswa per kecamatan dan per sekolah ----------
-  const KOL_REKAP = ['Jumlah Sekolah', 'Total Siswa', 'Valid', 'Tidak Valid', 'Valid Desil 1-4', 'Sudah SK', 'Sudah Diusulkan', 'Usulan Sekolah', 'Usulan Dinas', 'Kelas Berjalan', 'Kelas Awal'];
+  const KOL_REKAP = ['Jumlah Sekolah', 'Total Siswa', 'Valid', 'Tidak Valid', 'Valid Desil 1-4', 'Sudah SK', 'Sudah Diusulkan', 'Usulan Sekolah', 'Usulan Dinas', 'Usulan Pemangku (TA)', 'Kelas Berjalan', 'Kelas Awal'];
+  // jenis pengusul dari kolom "Fase Usulan" (mis. "2 Sekolah 2026", "2 Dinas 2026", "2 TA 2026"); selain Sekolah/Dinas dihitung Pemangku (TA)
+  const jenisUsul = r => {
+    const t = (bersih(r.fase_name) || bersih(r.role)).toLowerCase();
+    if (!t && !bersih(r.fase_id)) return '';
+    return /sekolah/.test(t) ? 'Sekolah' : /dinas/.test(t) ? 'Dinas' : 'Pemangku';
+  };
   function hitungSekolah(rows) {
-    const o = { 'Total Siswa': rows.length, 'Valid': 0, 'Tidak Valid': 0, 'Valid Desil 1-4': 0, 'Sudah SK': 0, 'Sudah Diusulkan': 0, 'Usulan Sekolah': 0, 'Usulan Dinas': 0, 'Kelas Berjalan': 0, 'Kelas Awal': 0 };
+    const o = { 'Total Siswa': rows.length, 'Valid': 0, 'Tidak Valid': 0, 'Valid Desil 1-4': 0, 'Sudah SK': 0, 'Sudah Diusulkan': 0, 'Usulan Sekolah': 0, 'Usulan Dinas': 0, 'Usulan Pemangku (TA)': 0, 'Kelas Berjalan': 0, 'Kelas Awal': 0 };
     rows.forEach(r => {
       const valid = String(r.valid_dukcapil) === '1' && String(r.valid_nisn) === '1';
       valid ? o.Valid++ : o['Tidak Valid']++;
@@ -257,8 +263,8 @@
       if (String(r.sk) === '1') o['Sudah SK']++;
       if (bersih(r.fase_name) || bersih(r.fase_id)) {
         o['Sudah Diusulkan']++;
-        const role = bersih(r.role).toLowerCase();
-        if (role === 'sekolah') o['Usulan Sekolah']++; else if (role === 'dinas') o['Usulan Dinas']++;
+        const j = jenisUsul(r);
+        if (j === 'Sekolah') o['Usulan Sekolah']++; else if (j === 'Dinas') o['Usulan Dinas']++; else if (j) o['Usulan Pemangku (TA)']++;
       }
       if (Number(r.nominal_id) === 1) o['Kelas Awal']++; else if (Number(r.nominal_id) === 2) o['Kelas Berjalan']++;
     });
@@ -272,9 +278,20 @@
     const perKec = Object.keys(kec).sort().map(k => ({ Kecamatan: k, ...jumlahkan(kec[k]) }));
     perKec.push({ Kecamatan: 'TOTAL', ...jumlahkan(perSek) });
     perSek.push({ Kecamatan: 'TOTAL', NPSN: '', Sekolah: `${daftar.length} sekolah`, Jenjang: '', ...hitungSekolah(daftar.flatMap(x => x.rows)) });
-    return { perKec, perSek };
+    // total usulan per kecamatan menurut kolom "Fase Usulan": Sekolah, Dinas, Pemangku (TA)
+    const totalUsulan = perKec.map(k => ({ Kecamatan: k.Kecamatan, 'Jumlah Sekolah': k['Jumlah Sekolah'], 'Usulan Sekolah': k['Usulan Sekolah'], 'Usulan Dinas': k['Usulan Dinas'],
+      'Usulan Pemangku (TA)': k['Usulan Pemangku (TA)'], 'Total Usulan': k['Usulan Sekolah'] + k['Usulan Dinas'] + k['Usulan Pemangku (TA)'] }));
+    return { perKec, perSek, totalUsulan };
   }
   const sheetRekap = (wb, nama, data, lebar) => { const ws = XLSX.utils.json_to_sheet(data); ws['!cols'] = lebar.map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, nama); };
+  // tiga sheet rekap: Rekap per Kecamatan, Total Usulan, Rekap per Sekolah
+  function tambahRekap(wb, daftar) {
+    const { perKec, perSek, totalUsulan } = buatRekap(daftar);
+    sheetRekap(wb, 'Rekap per Kecamatan', perKec, [24, 9, 9, 9, 9, 12, 9, 12, 12, 12, 20, 12, 12]);
+    sheetRekap(wb, 'Total Usulan', totalUsulan, [24, 9, 14, 14, 20, 14]);
+    sheetRekap(wb, 'Rekap per Sekolah', perSek, [22, 10, 36, 10, 9, 9, 9, 12, 12, 12, 12, 12, 20, 12, 12]);
+  }
+  const TULIS = { compression: true }; // tanpa ini file Excel tidak dikompres (bisa 8x lebih besar)
 
   // ---------- simpan ----------
   async function simpanHasil(mode) {
@@ -286,19 +303,17 @@
     if (mode === 'zip') {
       if (typeof JSZip === 'undefined') return log('⚠ Library ZIP gagal dimuat. Refresh halaman lalu coba lagi.');
       const zip = new JSZip();
-      { const { perKec, perSek } = buatRekap(daftar), wbR = XLSX.utils.book_new();
-        sheetRekap(wbR, 'Rekap per Kecamatan', perKec, [24, 9, 9, 9, 9, 12, 9, 12, 12, 12, 12, 12]);
-        sheetRekap(wbR, 'Rekap per Sekolah', perSek, [22, 10, 36, 10, 9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12]);
-        zip.file('Rekap per Kecamatan.xlsx', XLSX.write(wbR, { type: 'array', bookType: 'xlsx' })); }
+      { const wbR = XLSX.utils.book_new(); tambahRekap(wbR, daftar);
+        zip.file('Rekap per Kecamatan.xlsx', XLSX.write(wbR, { type: 'array', bookType: 'xlsx', ...TULIS })); }
       daftar.forEach(({ s, rows }) => {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([KOLOM_SITUS.map(k => k[1]), ...rows.map(r => KOLOM_SITUS.map(([k]) => r[k] ?? ''))]), 'Data');
         const kec = amanNama(rows[0]?.kecamatan || KEC[s.kode] || s.kec || 'Tanpa Kecamatan');
         const sub = s.kode.includes('·') ? ` (${s.jenjang})` : '';
-        zip.folder(kec).file(`${s.npsn} - ${amanNama(s.nama)}${sub}.xlsx`, XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+        zip.folder(kec).file(`${s.npsn} - ${amanNama(s.nama)}${sub}.xlsx`, XLSX.write(wb, { type: 'array', bookType: 'xlsx', ...TULIS }));
       });
       log('Menyusun ZIP…');
-      const blob = await zip.generateAsync({ type: 'blob' });
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Data_Siswa_per_Sekolah_${kab}_${tgl}.zip`; a.click();
       log(`✔ ZIP tersimpan: ${daftar.length} file sekolah.`);
     } else {
@@ -306,11 +321,9 @@
       const ws = XLSX.utils.json_to_sheet(semua);
       ws['!cols'] = [...KOLOM.map(([, l]) => ({ wch: Math.max(10, Math.min(35, l.length + 4)) })), { wch: 12 }];
       const wb = XLSX.utils.book_new();
-      { const { perKec, perSek } = buatRekap(daftar);
-        sheetRekap(wb, 'Rekap per Kecamatan', perKec, [24, 9, 9, 9, 9, 12, 9, 12, 12, 12, 12, 12]);
-        sheetRekap(wb, 'Rekap per Sekolah', perSek, [22, 10, 36, 10, 9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12]); }
+      tambahRekap(wb, daftar);
       XLSX.utils.book_append_sheet(wb, ws, 'Siswa');
-      XLSX.writeFile(wb, `Data_Siswa_PIP_${kab}_${tgl}.xlsx`);
+      XLSX.writeFile(wb, `Data_Siswa_PIP_${kab}_${tgl}.xlsx`, TULIS);
       log(`✔ Excel tersimpan: ${semua.length.toLocaleString('id')} siswa dari ${daftar.length} sekolah.`);
     }
   }
