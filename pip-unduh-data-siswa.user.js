@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         PIP Usulan - Unduh Data Siswa per Sekolah
 // @namespace    pip-unduh-data-siswa
-// @version      1.7
+// @version      1.8
 // Riwayat:
-//   1.7 - template surat diambil dari raw.githubusercontent.com (jsDelivr menolak file .docx)
-//   1.6 - tombol Buat Surat Usulan (Format 1a): rekap jenjang (TK, SD, SMP, Paket A/B/C) disimpan tiap akun selesai diunduh, formulir kop/nomor/penandatangan/logo, surat .docx terisi otomatis (total + terbilang)
+//   1.8 - fitur surat usulan dibatalkan dan dihapus (kembali seperti 1.5: sheet Total Usulan + file Excel dikompres)
 //   1.5 - sheet baru Total Usulan (usulan Sekolah, Dinas, Pemangku/TA per kecamatan dari kolom Fase Usulan) + kolom Usulan Pemangku (TA) di rekap; file Excel dikompres (dulu bisa 8x lebih besar)
 //   1.4 - nomor versi di panel ikut versi script (dulu tertulis 1.0)
 //   1.3 - alamat pembaruan otomatis (GitHub atha0604/Tools-PIP)
@@ -23,7 +22,7 @@
 
 (function () {
   'use strict';
-  const W = window, VERSI = '1.7';
+  const W = window, VERSI = '1.8';
   const CAP = { pdUrl: null, headers: {}, sekolah: [], jenjang: null, tebak: false };
   const KEC = {};            // kode sekolah -> kecamatan
   let HASIL = {};            // kode sekolah -> { s, rows }
@@ -136,7 +135,6 @@
       <button class="pipUnBtn u" id="pipUnZip">ZIP file Excel per sekolah</button>
       <button class="pipUnBtn" id="pipUnSimpan" disabled>Simpan data yang sudah terkumpul</button>
       <button class="pipUnBtn" id="pipUnUlang" disabled>Ulangi sekolah yang gagal</button>
-      <button class="pipUnBtn" id="pipUnSurat" style="background:#fef3c7;color:#92400e">📄 Buat Surat Usulan (Format 1a)</button>
       <button class="pipUnBtn s" id="pipUnStop" disabled>⏹ Stop</button>
       <div id="pipUnBar"><i></i></div><div id="pipUnPt">0 / 0</div><div id="pipUnLog"></div></div>`;
     document.body.appendChild(p);
@@ -148,7 +146,6 @@
     document.getElementById('pipUnExcel').onclick = () => mulai('excel');
     document.getElementById('pipUnZip').onclick = () => mulai('zip');
     document.getElementById('pipUnSimpan').onclick = () => simpanHasil(ModeTerakhir);
-    document.getElementById('pipUnSurat').onclick = bukaSurat;
     document.getElementById('pipUnUlang').onclick = ulangi;
     document.getElementById('pipUnStop').onclick = () => { STOP = true; log('⏹ Stop diminta, menunggu langkah yang berjalan selesai…'); };
     log(`Script v${VERSI} aktif.`);
@@ -250,7 +247,7 @@
       await ambil(daftar);
     } catch (e) { log('⚠ ' + e.message); }
     JALAN = false; status();
-    if (!GAGAL.length && Object.keys(HASIL).length) { simpanRekapJenjang(); await simpanHasil(mode); }
+    if (!GAGAL.length && Object.keys(HASIL).length) await simpanHasil(mode);
     else if (GAGAL.length) log(`Selesai sebagian: ${GAGAL.length} sekolah belum terambil. Tekan "Ulangi" atau "Simpan data yang sudah terkumpul".`);
   }
   async function ulangi() {
@@ -258,7 +255,7 @@
     try { if (!CAP.pdUrl || CAP.tebak) await aktifkanAkses(); } catch (e) { return log('⚠ ' + e.message); }
     const daftar = GAGAL.splice(0); STOP = false; JALAN = true; status();
     await ambil(daftar); JALAN = false; status();
-    if (!GAGAL.length) { log('Semua sekolah berhasil. Menyimpan…'); simpanRekapJenjang(); await simpanHasil(ModeTerakhir); }
+    if (!GAGAL.length) { log('Semua sekolah berhasil. Menyimpan…'); await simpanHasil(ModeTerakhir); }
   }
 
   // ---------- rekap: jumlah siswa per kecamatan dan per sekolah ----------
@@ -341,132 +338,5 @@
       XLSX.writeFile(wb, `Data_Siswa_PIP_${kab}_${tgl}.xlsx`, TULIS);
       log(`✔ Excel tersimpan: ${semua.length.toLocaleString('id')} siswa dari ${daftar.length} sekolah.`);
     }
-  }
-
-  // ---------- surat usulan (Format 1a): angka dari rekap tiap jenjang yang pernah diunduh ----------
-  // Tiap jenjang punya akun sendiri: setelah data satu akun selesai diunduh, rekapnya (jumlah sekolah & murid yang diusulkan
-  // Sekolah / Dinas / Pemangku) disimpan di browser. Surat menggabungkan rekap semua jenjang; angka bisa diubah manual.
-  const TEMPLATE_URL = W.__pipUnTemplate || 'https://raw.githubusercontent.com/atha0604/Tools-PIP/main/template-surat-usulan.docx';
-  const JENJANG_SURAT = [['TK', '1. TK'], ['SD', '2. SD'], ['SMP', '3. SMP'], ['PAKETA', '4. Program Paket A'], ['PAKETB', '5. Program Paket B'], ['PAKETC', '6. Program Paket C']];
-  const REKAP_KEY = 'pipUnRekapSurat', FORM_KEY = 'pipUnSurat';
-  const bacaLS = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch (e) { return d; } };
-  const tulisLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-  const petaJenjang = j => { const t = String(j || '').toUpperCase().replace(/[^A-Z]/g, ''); if (/^TK/.test(t)) return 'TK'; if (/^SD/.test(t)) return 'SD'; if (/^SMP/.test(t)) return 'SMP'; const m = t.match(/PAKET([ABC])/); return m ? 'PAKET' + m[1] : ''; };
-  const namaKab = raw => String(raw || '').replace(/^Kab\.\s*/i, 'Kabupaten ').replace(/^Kota\s+/i, 'Kota ').trim();
-  function simpanRekapJenjang() {
-    const g = {}, asing = new Set();
-    Object.values(HASIL).forEach(({ s, rows }) => {
-      const k = petaJenjang(s.jenjang);
-      if (!k) { asing.add(s.jenjang); return; }
-      const o = g[k] = g[k] || { sS: new Set(), sD: new Set(), sP: new Set(), mS: 0, mD: 0, mP: 0 };
-      rows.forEach(r => { const j = jenisUsul(r); if (!j) return; const x = j === 'Sekolah' ? 'S' : j === 'Dinas' ? 'D' : 'P'; o['s' + x].add(s.kode); o['m' + x]++; });
-    });
-    const st = bacaLS(REKAP_KEY, {});
-    Object.entries(g).forEach(([k, o]) => { st[k] = { sS: o.sS.size, mS: o.mS, sD: o.sD.size, mD: o.mD, sP: o.sP.size, mP: o.mP, waktu: Date.now() }; });
-    const kab = namaKab(Object.values(HASIL).find(x => x.rows[0]?.kabupaten)?.rows[0].kabupaten); if (kab) st._kab = kab;
-    tulisLS(REKAP_KEY, st);
-    log(`📄 Rekap untuk surat usulan tersimpan: ${Object.keys(g).join(', ') || '-'}.`);
-    if (asing.size) log(`ℹ Jenjang tidak dikenal untuk surat: ${[...asing].join(', ')} (angkanya bisa diisi manual).`);
-  }
-  function terbilang(n) {
-    const s = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
-    const t = x => { x = Math.floor(x);
-      if (x < 12) return s[x]; if (x < 20) return t(x - 10) + ' belas';
-      if (x < 100) return t(x / 10) + ' puluh' + (x % 10 ? ' ' + t(x % 10) : '');
-      if (x < 200) return 'seratus' + (x - 100 ? ' ' + t(x - 100) : '');
-      if (x < 1000) return t(x / 100) + ' ratus' + (x % 100 ? ' ' + t(x % 100) : '');
-      if (x < 2000) return 'seribu' + (x - 1000 ? ' ' + t(x - 1000) : '');
-      if (x < 1e6) return t(x / 1000) + ' ribu' + (x % 1000 ? ' ' + t(x % 1000) : '');
-      return t(x / 1e6) + ' juta' + (x % 1e6 ? ' ' + t(x % 1e6) : ''); };
-    return n === 0 ? 'nol' : t(n);
-  }
-  const escXml = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const angkaId = n => (Number(n) || 0).toLocaleString('id-ID');
-  const PNG_KOSONG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-  const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-
-  function bukaSurat() {
-    const st = bacaLS(REKAP_KEY, {}), f = { dinas: 'Dinas Pendidikan dan Kebudayaan', kab: st._kab || '', alamat: '', kontak: '', nomor: '', kota: '', jab: '', nama: '', pangkat: '', nip: '', ...bacaLS(FORM_KEY, {}) };
-    if (!f.kab && st._kab) f.kab = st._kab;
-    document.getElementById('pipUnSuratLayar')?.remove();
-    const el = document.createElement('div'); el.id = 'pipUnSuratLayar';
-    const inp = (id, lbl, v, ph = '') => `<label>${lbl}<input id="${id}" value="${escXml(v)}" placeholder="${escXml(ph)}"></label>`;
-    const baris = JENJANG_SURAT.map(([k, nm]) => { const d = st[k] || {}, ada = !!st[k];
-      const n = (a, v) => `<input type="number" min="0" data-k="${k}" data-f="${a}" value="${v ?? 0}">`;
-      return `<tr><td>${nm}${ada ? '' : ' <small>(belum diunduh)</small>'}</td><td>${n('sS', d.sS)}</td><td>${n('mS', d.mS)}</td><td>${n('sD', d.sD)}</td><td>${n('mD', d.mD)}</td><td class="ta">${d.mP ? d.mP : '-'}</td></tr>`; }).join('');
-    const css = `#pipUnSuratLayar{position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;font:13px/1.4 'Segoe UI',Roboto,sans-serif}
-      #pipUnSuratLayar .k{background:#fff;color:#1e293b;width:min(760px,96vw);max-height:94vh;overflow:auto;border-radius:12px;padding:16px 18px}
-      #pipUnSuratLayar h3{margin:0 0 4px;font-size:16px}#pipUnSuratLayar .g{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:10px 0}
-      #pipUnSuratLayar label{display:flex;flex-direction:column;font-size:12px;color:#475569;gap:2px}#pipUnSuratLayar label.l{grid-column:1/-1}
-      #pipUnSuratLayar input{padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font:inherit;color:#1e293b}
-      #pipUnSuratLayar table{width:100%;border-collapse:collapse;margin:6px 0}#pipUnSuratLayar td,#pipUnSuratLayar th{border:1px solid #e2e8f0;padding:4px 6px;text-align:center}
-      #pipUnSuratLayar td:first-child{text-align:left}#pipUnSuratLayar td input{width:70px;text-align:right}#pipUnSuratLayar th{background:#f1f5f9}
-      #pipUnSuratLayar .ta{color:#92400e;background:#fffbeb}#pipUnSuratLayar .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-      #pipUnSuratLayar button{border:0;border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#1e293b}#pipUnSuratLayar button.u{background:#0f766e;color:#fff}
-      #pipUnSuratLayar small{color:#64748b}`;
-    el.innerHTML = `<style>${css}</style><div class="k"><h3>📄 Surat Usulan PIP Dikdasmen (Format 1a)</h3>
-      <small>Isi data surat Anda (tersimpan di browser). Angka diambil dari rekap tiap jenjang yang sudah diunduh; bisa diubah manual.</small>
-      <div class="g">${inp('sKab', 'Kabupaten / Kota', f.kab, 'mis. Kabupaten Melawi')}${inp('sDinas', 'Nama dinas', f.dinas)}
-        ${inp('sAlamat', 'Alamat dinas', f.alamat, 'Jalan … Kode Pos …')}${inp('sKontak', 'Telp / Email', f.kontak, 'Telp./ Fax : … Email …')}
-        ${inp('sNomor', 'Nomor surat', f.nomor, '400.3.5.6/     /DIKBUD.C')}${inp('sKota', 'Kota dan tanggal surat', f.kota, 'Nanga Pinoh, 3 November 2026')}
-        ${inp('sJab', 'Jabatan penandatangan', f.jab, 'Kepala Dinas Pendidikan dan Kebudayaan')}${inp('sNama', 'Nama penandatangan (beserta gelar)', f.nama)}
-        ${inp('sPangkat', 'Pangkat / golongan', f.pangkat, 'Pembina Utama Muda')}${inp('sNip', 'NIP', f.nip, '19750611 199703 1 004')}
-        <label class="l">Logo kop surat (opsional, gambar PNG/JPG; bisa juga disisipkan di Word)<input id="sLogo" type="file" accept="image/*"></label></div>
-      <b>Rekap usulan per jenjang</b>
-      <table><tr><th rowspan="2">Satuan pendidikan</th><th colspan="2">A. Oleh Satuan Pendidikan</th><th colspan="2">B. Oleh Dinas</th><th rowspan="2" title="Tidak masuk surat kecuali dicentang">Pemangku (TA)</th></tr>
-        <tr><th>Jml sekolah</th><th>Jml murid</th><th>Jml sekolah</th><th>Jml murid</th></tr>${baris}</table>
-      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="sTa" style="width:auto"> Masukkan usulan Pemangku (TA) ke bagian B (Usulan oleh Dinas)</label>
-      <small>Jenjang yang belum diunduh: ganti akun lalu unduh datanya, atau isi angkanya di sini. Nomor dan tanggal surat sebaiknya diisi sebelum dicetak.</small>
-      <div class="bt"><button id="sTutup">Tutup</button><button class="u" id="sUnduh">Unduh surat (.docx)</button></div></div>`;
-    document.body.appendChild(el);
-    el.onmousedown = e => { if (e.target === el) el.remove(); };
-    document.getElementById('sTutup').onclick = () => el.remove();
-    document.getElementById('sUnduh').onclick = () => buatSurat(el).catch(e => { log('⚠ Surat gagal dibuat: ' + e.message); alert('Surat gagal dibuat: ' + e.message); });
-  }
-  async function buatSurat(el) {
-    if (typeof JSZip === 'undefined') throw new Error('Library ZIP/Word belum termuat. Refresh halaman lalu coba lagi.');
-    const v = id => (document.getElementById(id).value || '').trim();
-    const f = { dinas: v('sDinas'), kab: v('sKab'), alamat: v('sAlamat'), kontak: v('sKontak'), nomor: v('sNomor'), kota: v('sKota'), jab: v('sJab'), nama: v('sNama'), pangkat: v('sPangkat'), nip: v('sNip') };
-    if (!f.kab || !f.dinas) throw new Error('Isi dulu Kabupaten/Kota dan Nama dinas.');
-    tulisLS(FORM_KEY, f);
-    const st = bacaLS(REKAP_KEY, {}), taKeB = document.getElementById('sTa').checked;
-    const nilai = {};
-    el.querySelectorAll('input[data-k]').forEach(i => { (nilai[i.dataset.k] = nilai[i.dataset.k] || {})[i.dataset.f] = Math.max(0, parseInt(i.value) || 0); });
-    const isi = {}; let tAS = 0, tAM = 0, tBS = 0, tBM = 0;
-    JENJANG_SURAT.forEach(([k], i) => {
-      const n = nilai[k] || {}, p = st[k] || {};
-      const bS = n.sD + (taKeB ? p.sP || 0 : 0), bM = n.mD + (taKeB ? p.mP || 0 : 0), paket = i >= 3;
-      const cel = (a, b) => paket && !a && !b ? '-' : null;
-      isi[`A${i + 1}S`] = cel(n.sS, n.mS) ?? angkaId(n.sS); isi[`A${i + 1}M`] = cel(n.sS, n.mS) ?? angkaId(n.mS);
-      isi[`B${i + 1}S`] = cel(bS, bM) ?? angkaId(bS); isi[`B${i + 1}M`] = cel(bS, bM) ?? angkaId(bM);
-      tAS += n.sS; tAM += n.mS; tBS += bS; tBM += bM;
-    });
-    Object.assign(isi, { ATS: angkaId(tAS), ATM: angkaId(tAM), BTS: angkaId(tBS), BTM: angkaId(tBM) });
-    const total = tAM + tBM, dinasKab = `${f.dinas} ${f.kab}`;
-    Object.assign(isi, {
-      KOP1: 'PEMERINTAH ' + f.kab.toUpperCase(), KOP2: f.dinas.toUpperCase(), ALAMAT: f.alamat, KONTAK: f.kontak, NOMOR: f.nomor || '          ',
-      NAMA_DINAS_KAB: dinasKab, TOTAL: angkaId(total), TERBILANG: terbilang(total),
-      KOTA_TGL: f.kota || `……, ……… ${BULAN[new Date().getMonth()]} ${new Date().getFullYear()}`, JABATAN1: f.jab || `Kepala ${f.dinas}`, JABATAN2: f.kab + ',',
-      NAMA: f.nama, PANGKAT: f.pangkat, NIP: f.nip });
-    const res = await _fetch(TEMPLATE_URL);
-    if (!res.ok) throw new Error('Template surat tidak bisa dimuat (HTTP ' + res.status + '). Periksa koneksi internet.');
-    const zip = await JSZip.loadAsync(await res.arrayBuffer());
-    let x = await zip.file('word/document.xml').async('string');
-    Object.entries(isi).forEach(([k, val]) => { x = x.split('{{' + k + '}}').join(escXml(val)); });
-    zip.file('word/document.xml', x);
-    // logo: gambar yang dipilih (disesuaikan ke bingkai logo di template), atau PNG kosong
-    let logo = null; const berkas = document.getElementById('sLogo').files[0];
-    if (berkas) {
-      const m = x.match(/<wp:extent cx="(\d+)" cy="(\d+)"/), rasio = m ? m[1] / m[2] : 1;
-      const img = await new Promise((ok, gagal) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => gagal(new Error('Gambar logo tidak bisa dibaca.')); im.src = URL.createObjectURL(berkas); });
-      const H = 400, Wd = Math.round(H * rasio), c = document.createElement('canvas'); c.width = Wd; c.height = H;
-      const sk = Math.min(Wd / img.width, H / img.height); c.getContext('2d').drawImage(img, (Wd - img.width * sk) / 2, (H - img.height * sk) / 2, img.width * sk, img.height * sk);
-      logo = await new Promise(r => c.toBlob(r, 'image/png'));
-    }
-    if (logo) zip.file('word/media/image1.png', logo); else zip.file('word/media/image1.png', PNG_KOSONG, { base64: true });
-    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression: 'DEFLATE' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Surat_Usulan_PIP_${amanNama(f.kab.replace(/^Kabupaten\s+/i, ''))}_${new Date().toISOString().slice(0, 10)}.docx`; a.click();
-    log(`✔ Surat usulan dibuat: total ${angkaId(total)} murid (A ${angkaId(tAM)} · B ${angkaId(tBM)}).`);
-    el.remove();
   }
 })();
