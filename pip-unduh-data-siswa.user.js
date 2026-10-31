@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         PIP Usulan - Unduh Data Siswa per Sekolah
 // @namespace    pip-unduh-data-siswa
-// @version      1.6
+// @version      1.7
 // Riwayat:
+//   1.7 - template surat diambil dari raw.githubusercontent.com (jsDelivr menolak file .docx)
 //   1.6 - tombol Buat Surat Usulan (Format 1a): rekap jenjang (TK, SD, SMP, Paket A/B/C) disimpan tiap akun selesai diunduh, formulir kop/nomor/penandatangan/logo, surat .docx terisi otomatis (total + terbilang)
 //   1.5 - sheet baru Total Usulan (usulan Sekolah, Dinas, Pemangku/TA per kecamatan dari kolom Fase Usulan) + kolom Usulan Pemangku (TA) di rekap; file Excel dikompres (dulu bisa 8x lebih besar)
 //   1.4 - nomor versi di panel ikut versi script (dulu tertulis 1.0)
@@ -22,7 +23,7 @@
 
 (function () {
   'use strict';
-  const W = window, VERSI = '1.6';
+  const W = window, VERSI = '1.7';
   const CAP = { pdUrl: null, headers: {}, sekolah: [], jenjang: null, tebak: false };
   const KEC = {};            // kode sekolah -> kecamatan
   let HASIL = {};            // kode sekolah -> { s, rows }
@@ -345,7 +346,7 @@
   // ---------- surat usulan (Format 1a): angka dari rekap tiap jenjang yang pernah diunduh ----------
   // Tiap jenjang punya akun sendiri: setelah data satu akun selesai diunduh, rekapnya (jumlah sekolah & murid yang diusulkan
   // Sekolah / Dinas / Pemangku) disimpan di browser. Surat menggabungkan rekap semua jenjang; angka bisa diubah manual.
-  const TEMPLATE_URL = W.__pipUnTemplate || 'https://cdn.jsdelivr.net/gh/atha0604/Tools-PIP@main/template-surat-usulan.docx';
+  const TEMPLATE_URL = W.__pipUnTemplate || 'https://raw.githubusercontent.com/atha0604/Tools-PIP/main/template-surat-usulan.docx';
   const JENJANG_SURAT = [['TK', '1. TK'], ['SD', '2. SD'], ['SMP', '3. SMP'], ['PAKETA', '4. Program Paket A'], ['PAKETB', '5. Program Paket B'], ['PAKETC', '6. Program Paket C']];
   const REKAP_KEY = 'pipUnRekapSurat', FORM_KEY = 'pipUnSurat';
   const bacaLS = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch (e) { return d; } };
